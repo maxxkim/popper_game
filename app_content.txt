@@ -1,0 +1,463 @@
+# Flutter Project Knowledge Base
+# Created on Wed May 14 14:55:48 MSK 2025
+# Contents from ./lib directory
+
+## File: lib/background/background.dart
+```dart
+import 'package:flame/components.dart';
+import 'package:flutter/material.dart';
+class Background extends Component with HasGameReference {
+ final Paint _paint;
+ 
+ Background({Color color = const Color(0xFF2A80B9)})
+ : _paint = Paint()..color = color;
+ 
+ @override
+ void render(Canvas canvas) {
+ canvas.drawRect(
+ Rect.fromLTWH(0, 0, game.size.x, game.size.y),
+ _paint,
+ );
+ }
+ 
+ @override
+ int get priority => -1; // Draw behind everything else
+}
+```
+
+## File: lib/background/gradient_background.dart
+```dart
+import 'package:flame/components.dart';
+import 'package:flutter/material.dart';
+class GradientBackground extends Component with HasGameReference {
+ final Paint _paint;
+ 
+ GradientBackground({
+ List<Color> colors = const [Color(0xFF87CEEB), Color(0xFF1E90FF)],
+ List<double>? stops,
+ AlignmentGeometry begin = Alignment.topCenter,
+ AlignmentGeometry end = Alignment.bottomCenter,
+ }) : _paint = Paint() {
+ _paint.shader = LinearGradient(
+ colors: colors,
+ stops: stops,
+ begin: begin,
+ end: end,
+ ).createShader(Rect.largest);
+ }
+ 
+ @override
+ void render(Canvas canvas) {
+ canvas.drawRect(
+ Rect.fromLTWH(0, 0, game.size.x, game.size.y),
+ _paint,
+ );
+ }
+ 
+ @override
+ int get priority => -1; // Draw behind everything else
+}
+```
+
+## File: lib/background/image_background.dart
+```dart
+import 'package:flame/components.dart';
+class ImageBackground extends SpriteComponent with HasGameReference {
+ final String imagePath;
+ 
+ ImageBackground({required this.imagePath}) : super(priority: -1);
+ 
+ @override
+ Future<void> onLoad() async {
+ sprite = await game.loadSprite(imagePath);
+ 
+ size = game.size;
+ 
+ anchor = Anchor.topLeft;
+ }
+}
+```
+
+## File: lib/bubble_game.dart
+```dart
+import 'dart:math';
+import 'package:flame/game.dart';
+import 'package:flame/components.dart';
+import 'package:flame/events.dart';
+import 'package:flame_bubble_pop/background/background.dart';
+import 'package:flame_bubble_pop/background/gradient_background.dart';
+import 'package:flame_bubble_pop/background/image_background.dart';
+import 'package:flame_bubble_pop/bubble.dart';
+import 'package:flutter/material.dart';
+enum BackgroundType {
+ solid,
+ gradient,
+ image,
+}
+class BubbleGame extends FlameGame with TapCallbacks, HasCollisionDetection {
+ int score = 0;
+ final Random _random = Random();
+ double spawnCooldown = 0.5;
+ double timeSinceLastSpawn = 0;
+ late final TextComponent scoreComponent;
+ 
+ final BackgroundType backgroundType;
+ final Color bgColor;
+ final List<Color> gradientColors;
+ final String? backgroundImagePath;
+ 
+ BubbleGame({
+ this.backgroundType = BackgroundType.image,
+ this.bgColor = const Color(0xFF87CEEB),
+ this.gradientColors = const [Color(0xFF87CEEB), Color(0xFF1E90FF)],
+ this.backgroundImagePath = 'background.png',
+ });
+ 
+ @override
+ Future<void> onLoad() async {
+ await super.onLoad();
+ 
+ await images.loadAll([
+ 'pop.png',
+ if (backgroundType == BackgroundType.image && backgroundImagePath != null) 
+ backgroundImagePath!,
+ ]);
+ 
+ switch (backgroundType) {
+ case BackgroundType.solid:
+ add(Background(color: bgColor));
+ break;
+ case BackgroundType.gradient:
+ add(GradientBackground(colors: gradientColors));
+ break;
+ case BackgroundType.image:
+ if (backgroundImagePath != null) {
+ try {
+ add(ImageBackground(imagePath: backgroundImagePath!));
+ } catch (e) {
+ add(GradientBackground(colors: gradientColors));
+ }
+ } else {
+ add(GradientBackground(colors: gradientColors));
+ }
+ break;
+ }
+ 
+scoreComponent = TextComponent(
+ text: 'Score: 0',
+ position: Vector2(30, 120), // Moved from y=20 to y=60 to avoid clock overlay
+ textRenderer: TextPaint(
+ style: const TextStyle(
+ color: Colors.white,
+ fontSize: 24,
+ fontWeight: FontWeight.bold,
+ shadows: [
+ Shadow(
+ blurRadius: 3,
+ color: Colors.black,
+ offset: Offset(1, 1),
+ ),
+ ],
+ ),
+ ),
+ priority: 10,
+);
+ add(scoreComponent);
+ }
+ 
+ @override
+ void update(double dt) {
+ super.update(dt);
+ 
+ timeSinceLastSpawn += dt;
+ if (timeSinceLastSpawn >= spawnCooldown) {
+ spawnBubble();
+ timeSinceLastSpawn = 0;
+ 
+ if (spawnCooldown > 0.1) {
+ spawnCooldown -= 0.01;
+ }
+ }
+ 
+ scoreComponent.text = 'Score: $score';
+ }
+ 
+ void spawnBubble() {
+ final x = _random.nextDouble() * (size.x - 100);
+ final lowerHalfStart = size.y * 0.5; // Start from the middle of the screen
+ final availableHeight = size.y * 0.4; // Use 40% of the screen height for spawning (avoiding the very bottom)
+ final y = lowerHalfStart + (_random.nextDouble() * availableHeight);
+ final bubbleSize = 50 + _random.nextDouble() * 50;
+ add(
+ Bubble(
+ position: Vector2(x, y),
+ size: Vector2.all(bubbleSize),
+ lifespan: 2 + _random.nextDouble() * 2, // 2-4 seconds lifespan
+ onPopped: () {
+ score += (100 ~/ bubbleSize).round(); // Smaller bubbles = more points
+ },
+ ),
+ );
+ }
+}
+```
+
+## File: lib/bubble.dart
+```dart
+import 'dart:math';
+import 'package:flame/components.dart';
+import 'package:flame/effects.dart';
+import 'package:flame/events.dart';
+import 'package:flame_bubble_pop/bubble_game.dart';
+import 'package:flame_svg/flame_svg.dart';
+import 'package:flutter/material.dart';
+class Bubble extends PositionComponent 
+ with TapCallbacks, HasGameReference<BubbleGame> implements OpacityProvider {
+ final VoidCallback onPopped;
+ final double lifespan;
+ bool _isPopped = false;
+ double _timeAlive = 0;
+ final Random _random = Random();
+ Component? _bubbleContent;
+ Component? _popAnimation;
+ 
+ double _opacity = 1.0;
+ 
+ @override
+ double get opacity => _opacity;
+ 
+ @override
+ set opacity(double value) {
+ _opacity = value.clamp(0.0, 1.0);
+ }
+ 
+ Bubble({
+ required Vector2 position,
+ required Vector2 size,
+ required this.lifespan,
+ required this.onPopped,
+ }) : super(
+ position: position,
+ size: size,
+ anchor: Anchor.center,
+ );
+ 
+ @override
+ Future<void> onLoad() async {
+ try {
+ final String svgPath = _random.nextBool() 
+ ? 'images/musician.svg' 
+ : 'images/forecaster.svg';
+ 
+ final svg = await Svg.load(svgPath);
+ _bubbleContent = SvgComponent(
+ svg: svg,
+ position: Vector2.zero(),
+ size: size,
+ );
+ add(_bubbleContent!);
+ } catch (e) {
+ try {
+ _bubbleContent = SpriteComponent(
+ sprite: await game.loadSprite('bubble.png'),
+ position: Vector2.zero(),
+ size: size,
+ );
+ add(_bubbleContent!);
+ } catch (e) {
+ _bubbleContent = CircleComponent(
+ radius: size.x / 2,
+ paint: Paint()
+ ..shader = RadialGradient(
+ colors: [
+ Colors.lightBlue.shade300,
+ Colors.blue.shade600,
+ ],
+ stops: const [0.0, 1.0],
+ ).createShader(Rect.fromCircle(
+ center: Offset(size.x / 2, size.y / 2),
+ radius: size.x / 2,
+ ))
+ );
+ add(_bubbleContent!);
+ }
+ }
+ 
+ add(
+ ScaleEffect.by(
+ Vector2.all(1.1),
+ EffectController(
+ duration: 0.5,
+ reverseDuration: 0.5,
+ infinite: true,
+ curve: Curves.easeInOut,
+ ),
+ ),
+ );
+ 
+ try {
+ await Svg.load('images/pop.svg');
+ } catch (e) {
+ }
+ }
+ 
+ @override
+ void update(double dt) {
+ super.update(dt);
+ 
+ if (_isPopped) return;
+ 
+ _timeAlive += dt;
+ if (_timeAlive >= lifespan) {
+ removeFromParent();
+ }
+ }
+ 
+ void _createCombinedExplosionEffect() {
+ _createParticleExplosion();
+ 
+ _addSvgExplosion();
+ }
+ 
+ void _addSvgExplosion() {
+ try {
+ Svg.load('images/pop.svg').then((svg) {
+ _popAnimation = SvgComponent(
+ svg: svg,
+ position: size / 2,
+ size: size * 1.8, // Make it larger
+ anchor: Anchor.center,
+ );
+ add(_popAnimation!);
+ 
+ _popAnimation!.add(
+ SequenceEffect([
+ ScaleEffect.by(
+ Vector2.all(1.3),
+ EffectController(
+ duration: 0.2,
+ curve: Curves.easeOut,
+ ),
+ ),
+ OpacityEffect.fadeOut(
+ EffectController(duration: 0.2),
+ ),
+ ]),
+ );
+ }).catchError((_) {
+ });
+ } catch (e) {
+ }
+ }
+ 
+ void _createParticleExplosion() {
+ final colors = [
+ Colors.red,
+ Colors.orange,
+ Colors.yellow,
+ ];
+ 
+ for (int i = 0; i < 8; i++) {
+ final angle = i * pi / 4; // 8 directions
+ final color = colors[i % colors.length];
+ 
+ final particle = CircleComponent(
+ radius: size.x / 6,
+ position: size / 2,
+ anchor: Anchor.center,
+ paint: Paint()..color = color,
+ );
+ 
+ add(particle);
+ 
+ particle.add(
+ MoveEffect.by(
+ Vector2(cos(angle), sin(angle)) * size.x,
+ EffectController(
+ duration: 0.3,
+ curve: Curves.easeOut,
+ ),
+ ),
+ );
+ 
+ if (particle is OpacityProvider) {
+ particle.add(
+ OpacityEffect.fadeOut(
+ EffectController(
+ duration: 0.3,
+ ),
+ ),
+ );
+ }
+ }
+ 
+ final flash = CircleComponent(
+ radius: size.x / 2,
+ position: size / 2,
+ anchor: Anchor.center,
+ paint: Paint()..color = Colors.white.withOpacity(0.8),
+ );
+ 
+ add(flash);
+ 
+ flash.add(
+ SequenceEffect([
+ ScaleEffect.by(
+ Vector2.all(1.5),
+ EffectController(
+ duration: 0.1,
+ curve: Curves.easeOut,
+ ),
+ ),
+ OpacityEffect.fadeOut(
+ EffectController(duration: 0.2),
+ ),
+ ]),
+ );
+ }
+ 
+ @override
+ void onTapUp(TapUpEvent event) {
+ if (_isPopped) return;
+ 
+ _isPopped = true;
+ onPopped();
+ 
+ if (_bubbleContent != null) {
+ if (_bubbleContent is OpacityProvider) {
+ _bubbleContent!.add(
+ OpacityEffect.fadeOut(
+ EffectController(duration: 0.2),
+ ),
+ );
+ } else {
+ _bubbleContent!.removeFromParent();
+ }
+ }
+ 
+ _createCombinedExplosionEffect();
+ 
+ add(
+ OpacityEffect.fadeOut(
+ EffectController(duration: 0.5), // Longer duration to see the full animation
+ onComplete: () => removeFromParent(),
+ ),
+ );
+ }
+}
+```
+
+## File: lib/main.dart
+```dart
+import 'package:flame/game.dart';
+import 'package:flutter/material.dart';
+import 'bubble_game.dart';
+void main() {
+ runApp(
+ const GameWidget<BubbleGame>.controlled(
+ gameFactory: BubbleGame.new,
+ ),
+ );
+}
+```
+

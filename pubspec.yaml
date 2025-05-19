@@ -24,7 +24,7 @@ flutter:
 
   assets:
     - assets/images/bubble.png
-    - assets/images/pop.svg
+    - assets/images/pop.png
     - assets/images/background.png
     - assets/images/musician.svg
     - assets/images/forecaster.svg

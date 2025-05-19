@@ -2,7 +2,7 @@
 
 A fun and interactive bubble popping game built with Flutter and the Flame game engine.
 
-![Bubble Pop Game](https://via.placeholder.com/800x400?text=Flame+Bubble+Pop+Game)
+![Screenshot](https://github.com/user-attachments/assets/3809371e-b011-42dc-a757-40a29c42c721)
 
 ## 📖 Description
 

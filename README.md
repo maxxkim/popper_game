@@ -2,8 +2,6 @@
 
 A fun and interactive bubble popping game built with Flutter and the Flame game engine.
 
-![Screenshot](https://github.com/user-attachments/assets/3809371e-b011-42dc-a757-40a29c42c721)
-
 ## 📖 Description
 
 Flame Bubble Pop is a simple yet addictive game where players pop colorful bubbles that appear on the screen. The game features:
@@ -14,6 +12,9 @@ Flame Bubble Pop is a simple yet addictive game where players pop colorful bubbl
 - Various background options (solid color, gradient, or image)
 - Animated bubble popping effects with particles
 - SVG-based graphics (when available)
+
+![Screenshot](https://github.com/user-attachments/assets/3809371e-b011-42dc-a757-40a29c42c721)
+
 
 ## 🚀 Getting Started
 
